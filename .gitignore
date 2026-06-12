@@ -1,0 +1,24 @@
+.old/
+*.txt
+
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+*.test
+
+# Local coverage profiles
+*.out
+*.prof
+
+# Visual Studio Code
+.vscode/
+.history/
+
+# Local system files
+.DS_Store
+Thumbs.db
+output/
