@@ -62,7 +62,7 @@ graph TD
 ## Installation
 
 ```bash
-go install github.com/R0X4R/ressrf@latest
+go install -v github.com/R0X4R/ressrf@latest
 ```
 
 Upon initial initialization, the tool automatically provisions its default multi-cloud wordlists inside `~/.config/ressrf/payloads.cfg`*
