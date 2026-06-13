@@ -7,6 +7,11 @@ import (
 	"github.com/R0X4R/ressrf/pkg"
 )
 
+// ExecuteHeaderPhase enqueues header-injection jobs for each target URL and header vector using both payload formats (with and without an HTTP scheme).
+//
+// For each generated payload an identifier is allocated (incrementing trackCounter) and corresponding metadata is stored in requestTracker. Each job, when executed, will wait on rl, set the specified header to the payload, send the request, and invoke logActivity with either "ERROR" (on send failure) or "SENT" (on success) including the target URL, status code, and a short detail string.
+//
+// ExecuteHeaderPhase schedules work onto the provided jobs channel and increments wg for each scheduled job; it does not block waiting for job completion.
 func ExecuteHeaderPhase(
 	urls []string,
 	collab string,
@@ -16,7 +21,7 @@ func ExecuteHeaderPhase(
 	trackMutex *sync.Mutex,
 	trackCounter *int,
 	requestTracker map[string]pkg.VulnerabilityMetadata,
-	logActivity func(string, ...interface{}),
+	logActivity func(string, string, int, string),
 ) {
 	for _, rawURL := range urls {
 		for _, header := range pkg.HeadersInject {
@@ -47,10 +52,12 @@ func ExecuteHeaderPhase(
 						hdrs[hdrKey] = payloadStr
 						status, _, err := pkg.SendRequest(targetURL, hdrs)
 						if err != nil {
-							logActivity("REQUEST ERROR - Header Target: %s [%s: %s] | Err: %v", targetURL, hdrKey, payloadStr, err)
+
+							logActivity("ERROR", targetURL, 0, fmt.Sprintf("Header Key [%s] - %s", hdrKey, err.Error()))
 							return
 						}
-						logActivity("REQUEST SENT - Status: [%d] | Header: [%s: %s] | Target URL: %s", status, hdrKey, payloadStr, targetURL)
+
+						logActivity("SENT", targetURL, status, fmt.Sprintf("Header Vector [%s]", hdrKey))
 					}
 				}(u, h, p)
 			}

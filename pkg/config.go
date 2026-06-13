@@ -1,7 +1,7 @@
 package pkg
 
 import (
-	_ "embed" // Required for compile-time asset embedding
+	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,6 +23,7 @@ type Options struct {
 	ExtraHeader  string
 	Silent       bool
 	ColorBlind   bool
+	Verbose      bool
 }
 
 type VulnerabilityMetadata struct {
@@ -40,6 +41,7 @@ var (
 	ExtraHeader  *string
 	Silent       *bool
 	ColorBlind   *bool
+	Verbose      *bool
 
 	PayloadsFile  = filepath.Join(os.Getenv("HOME"), ".config", "ressrf", "payloads.cfg")
 	HeadersInject = []string{
@@ -58,7 +60,13 @@ var (
 	QsReplaceRegex = regexp.MustCompile(`=([^?|&]*)`)
 )
 
-// EnsurePayloadsConfig initializes or appends default vectors safely on the host system
+// EnsurePayloadsConfig ensures the payloads configuration file exists and contains the embedded default vectors.
+// 
+// If the configured payload file does not exist, it will be created containing the embedded defaults.
+// If the file exists, any default vectors not already present will be appended (with a separator) so existing
+// user content is preserved. When `silent` is false a brief status message is printed.
+// 
+// Errors are returned for filesystem failures such as directory creation, file reads, or writes.
 func EnsurePayloadsConfig(silent bool) error {
 	configDir := filepath.Dir(PayloadsFile)
 
@@ -68,9 +76,6 @@ func EnsurePayloadsConfig(silent bool) error {
 	}
 
 	if _, err := os.Stat(PayloadsFile); os.IsNotExist(err) {
-		if !silent {
-			fmt.Printf("[*] First-time initialization: Writing default payloads to %s\n", PayloadsFile)
-		}
 		return os.WriteFile(PayloadsFile, []byte(strings.TrimSpace(defaultPayloads)+"\n"), 0644)
 	}
 
@@ -96,7 +101,7 @@ func EnsurePayloadsConfig(silent bool) error {
 
 	if len(linesToAppend) > 0 {
 		if !silent {
-			fmt.Printf("[*] Syncing workspace: Appending %d new default payloads to %s\n", len(linesToAppend), PayloadsFile)
+			fmt.Printf("[*] SYNCING WORKSPACE: Appending %d new default payloads to %s\n", len(linesToAppend), PayloadsFile)
 		}
 
 		f, err := os.OpenFile(PayloadsFile, os.O_APPEND|os.O_WRONLY, 0644)
@@ -121,6 +126,11 @@ func EnsurePayloadsConfig(silent bool) error {
 	return nil
 }
 
+// ParseOptions parses command-line flags into an Options value and initializes package-level option pointers.
+//
+// It validates the optional InputFile when provided (must exist, must not be a directory, must be non-empty).
+// It also ensures the payloads configuration is present by running the sync routine and will return an error if that setup fails.
+// Returns the populated *Options on success or a non-nil error if flag parsing, input validation, or config setup fails.
 func ParseOptions() (*Options, error) {
 	os.Args[0] = "ressrf"
 
@@ -129,7 +139,7 @@ func ParseOptions() (*Options, error) {
 	flagSet.SetDescription(`ReSSRF - An advanced Out-of-Band and In-Band SSRF fuzzing scanner with dynamic request tracking.`)
 
 	flagSet.CreateGroup("input", "Input Target Options",
-		flagSet.StringVarP(&options.InputFile, "list", "l", "", "\tInput file containing target URLs (Required)"),
+		flagSet.StringVarP(&options.InputFile, "list", "l", "", "\tInput file containing target URLs (Optional if using stdin pipeline)"),
 		flagSet.StringVarP(&options.CollabServer, "collab", "c", "", "\tCustom Interactsh/OAST collaboration server domain"),
 	)
 
@@ -142,6 +152,7 @@ func ParseOptions() (*Options, error) {
 	flagSet.CreateGroup("optimization", "Display Options",
 		flagSet.BoolVarP(&options.Silent, "silent", "s", false, "\tSuppress banner, phase notifications and summary stats"),
 		flagSet.BoolVarP(&options.ColorBlind, "color-blind", "b", false, "\tDisable colored terminal output sequences completely"),
+		flagSet.BoolVarP(&options.Verbose, "verbose", "v", false, "\tShow livestream of active connection updates and status codes"),
 	)
 
 	flagSet.CreateGroup("output", "Output Directories",
@@ -152,24 +163,22 @@ func ParseOptions() (*Options, error) {
 		return nil, err
 	}
 
-	if options.InputFile == "" {
-		return nil, fmt.Errorf("[!] RESSRF Error: Input target list file is required. Use -l <file>")
-	}
-
-	fileInfo, err := os.Stat(options.InputFile)
-	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("[!] RESSRF Error: Specified input file '%s' does not exist", options.InputFile)
-	}
-	if fileInfo.IsDir() {
-		return nil, fmt.Errorf("[!] RESSRF Error: '%s' is a directory, expected a regular file", options.InputFile)
-	}
-	if fileInfo.Size() == 0 {
-		return nil, fmt.Errorf("[!] RESSRF Error: Specified input file '%s' is empty", options.InputFile)
+	if options.InputFile != "" {
+		fileInfo, err := os.Stat(options.InputFile)
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("[!] RESSRF Error: Specified input file '%s' does not exist", options.InputFile)
+		}
+		if fileInfo.IsDir() {
+			return nil, fmt.Errorf("[!] RESSRF Error: '%s' is a directory, expected a regular file", options.InputFile)
+		}
+		if fileInfo.Size() == 0 {
+			return nil, fmt.Errorf("[!] RESSRF Error: Specified input file '%s' is empty", options.InputFile)
+		}
 	}
 
 	// Automatically run the sync configuration pipeline seamlessly
 	if err := EnsurePayloadsConfig(options.Silent); err != nil {
-		return nil, fmt.Errorf("[!] Config Setup Error: %v", err)
+		return nil, fmt.Errorf("[!] CONFIG SETUP ERROR: %v", err)
 	}
 
 	InputFile = &options.InputFile
@@ -180,6 +189,7 @@ func ParseOptions() (*Options, error) {
 	ExtraHeader = &options.ExtraHeader
 	Silent = &options.Silent
 	ColorBlind = &options.ColorBlind
-
+	Verbose = &options.Verbose
+	
 	return options, nil
 }
