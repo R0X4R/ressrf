@@ -60,7 +60,13 @@ var (
 	QsReplaceRegex = regexp.MustCompile(`=([^?|&]*)`)
 )
 
-// EnsurePayloadsConfig initializes or appends default vectors safely on the host system
+// EnsurePayloadsConfig ensures the payloads configuration file exists and contains the embedded default vectors.
+// 
+// If the configured payload file does not exist, it will be created containing the embedded defaults.
+// If the file exists, any default vectors not already present will be appended (with a separator) so existing
+// user content is preserved. When `silent` is false a brief status message is printed.
+// 
+// Errors are returned for filesystem failures such as directory creation, file reads, or writes.
 func EnsurePayloadsConfig(silent bool) error {
 	configDir := filepath.Dir(PayloadsFile)
 
@@ -120,6 +126,11 @@ func EnsurePayloadsConfig(silent bool) error {
 	return nil
 }
 
+// ParseOptions parses command-line flags into an Options value and initializes package-level option pointers.
+//
+// It validates the optional InputFile when provided (must exist, must not be a directory, must be non-empty).
+// It also ensures the payloads configuration is present by running the sync routine and will return an error if that setup fails.
+// Returns the populated *Options on success or a non-nil error if flag parsing, input validation, or config setup fails.
 func ParseOptions() (*Options, error) {
 	os.Args[0] = "ressrf"
 
