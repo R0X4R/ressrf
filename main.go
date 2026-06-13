@@ -18,6 +18,9 @@ import (
 	"github.com/projectdiscovery/interactsh/pkg/server"
 )
 
+// logActivity writes a timestamped activity entry to the activity.log file and, when verbose and not silent, prints a colored console message.
+// For evtType == "ERROR", it records an "UNABLE TO CONNECT" entry including details; otherwise it records a "REQ SENT" entry including status, target, and optional details.
+// The console output colorizes the status (green for 2xx, cyan for 3xx, yellow for others) and the log is appended to (*pkg.OutDir)/activity.log.
 func logActivity(evtType string, target string, status int, details string) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	var msg, consoleMsg string
@@ -49,12 +52,16 @@ func logActivity(evtType string, target string, status int, details string) {
 	}
 }
 
+// logCallback appends a timestamped log line, formatted with the provided printf-style
+// format and arguments, to the callback.log file in the configured output directory.
 func logCallback(format string, args ...interface{}) {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	msg := fmt.Sprintf("[%s] ", timestamp) + fmt.Sprintf(format, args...)
 	pkg.AppendLine(*pkg.OutDir+"/callback.log", msg)
 }
 
+// hasStdinData reports whether standard input has data available (i.e., stdin is not a terminal).
+// It returns true when stdin is not a character device, and false if stdin is a terminal or if Stat() fails.
 func hasStdinData() bool {
 	stat, err := os.Stdin.Stat()
 	if err != nil {
@@ -63,6 +70,21 @@ func hasStdinData() bool {
 	return (stat.Mode() & os.ModeCharDevice) == 0
 }
 
+// main is the program entry point that orchestrates configuration parsing, target collection,
+// collaboration session initialization, concurrent scanning phases, out-of-band callback polling,
+// and final result reporting.
+//
+// It parses CLI options and prepares the output directory, sources target URLs from stdin
+// when available or from the configured input file, and either starts an Interactsh client
+// or normalizes a provided collab server string. It launches worker goroutines, installs an
+// interrupt handler that cleans up and logs a termination event, and starts a poller to
+// process out-of-band interactions which are recorded to findings and activity logs.
+// The function executes header, parameter, and protocol scan phases, waits for completion,
+// keeps the session open for a short grace period to collect late callbacks, and then
+// prints and stores summarized OOB results.
+//
+// The function terminates the process on fatal configuration or runtime errors (printing
+// an error message before exiting).
 func main() {
 	_, err := pkg.ParseOptions()
 	if err != nil {
