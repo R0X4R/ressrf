@@ -16,7 +16,7 @@ func ExecuteParameterPhase(
 	trackMutex *sync.Mutex,
 	trackCounter *int,
 	requestTracker map[string]pkg.VulnerabilityMetadata,
-	logActivity func(string, ...interface{}),
+	logActivity func(string, string, int, string),
 ) {
 	for _, rawURL := range urls {
 		for _, useScheme := range []bool{false, true} {
@@ -43,10 +43,10 @@ func ExecuteParameterPhase(
 					rl.Wait()
 					status, _, err := pkg.SendRequest(targetURL, pkg.BaseHeaders())
 					if err != nil {
-						logActivity("REQUEST ERROR - URL Param Target: %s | Err: %v", targetURL, err)
+						logActivity("ERROR", targetURL, 0, err.Error())
 						return
 					}
-					logActivity("REQUEST SENT - Status: [%d] | Target URL: %s", status, targetURL)
+					logActivity("SENT", targetURL, status, "URL Parameter Phase Vector")
 				}
 			}(u)
 		}

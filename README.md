@@ -91,6 +91,7 @@ ressrf -h
 | **`-o`** | `--outdir` | `vulns` | Output directory path for log captures and finding summaries. |
 | **`-s`** | `--silent` | `false` | Suppress text banners, informational stats, and milestone lines. |
 | **`-b`** | `--color-blind` | `false` | Strip ANSI terminal color sequences from stdout streams. |
+| **`-v`** | `--verbose` | `false` | Show livestream of active connection updates and status codes |
 
 ### Operational Examples
 
@@ -105,6 +106,21 @@ Quiet fuzz execution routed to custom output storage destinations:
 ```bash
 ressrf -l targets.txt -s -o ssrf_audit
 ```
+
+You can it pipe with other tools:
+
+```bash
+subfinder -d target.com -all -silent | httpx -silent | katana -silent | gf ssrf | ressrf
+```
+
+To watch connection status modifications or debugging logs in real-time, add the verbose flag. It streams active network interactions, status codes, and connection failures straight to your terminal screen:
+
+```bash
+cat targets.txt | ressrf -v
+```
+
+> [!NOTE]
+> The silent flag (`-s`) will completely suppress console output. If you want to see live verbose updates on your screen, ensure that you do not pass `-s` in your command chain.
 
 ## Custom Payloads
 

@@ -16,7 +16,7 @@ func ExecuteHeaderPhase(
 	trackMutex *sync.Mutex,
 	trackCounter *int,
 	requestTracker map[string]pkg.VulnerabilityMetadata,
-	logActivity func(string, ...interface{}),
+	logActivity func(string, string, int, string),
 ) {
 	for _, rawURL := range urls {
 		for _, header := range pkg.HeadersInject {
@@ -47,10 +47,12 @@ func ExecuteHeaderPhase(
 						hdrs[hdrKey] = payloadStr
 						status, _, err := pkg.SendRequest(targetURL, hdrs)
 						if err != nil {
-							logActivity("REQUEST ERROR - Header Target: %s [%s: %s] | Err: %v", targetURL, hdrKey, payloadStr, err)
+
+							logActivity("ERROR", targetURL, 0, fmt.Sprintf("Header Key [%s] - %s", hdrKey, err.Error()))
 							return
 						}
-						logActivity("REQUEST SENT - Status: [%d] | Header: [%s: %s] | Target URL: %s", status, hdrKey, payloadStr, targetURL)
+
+						logActivity("SENT", targetURL, status, fmt.Sprintf("Header Vector [%s]", hdrKey))
 					}
 				}(u, h, p)
 			}

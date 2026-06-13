@@ -15,7 +15,7 @@ func ExecuteProtocolPhase(
 	rl *pkg.RateLimiter,
 	jobs chan<- func(),
 	wg *sync.WaitGroup,
-	logActivity func(string, ...interface{}),
+	logActivity func(string, string, int, string),
 ) {
 	payloads, err := pkg.ReadLines(pkg.PayloadsFile)
 	if err != nil {
@@ -36,11 +36,13 @@ func ExecuteProtocolPhase(
 					defer wg.Done()
 					rl.Wait()
 					status, body, err := pkg.SendRequest(targetURL, pkg.BaseHeaders())
+
 					if err != nil {
-						logActivity("REQUEST ERROR - Alt Proto Target: %s | Err: %v", targetURL, err)
+						logActivity("ERROR", targetURL, 0, err.Error())
 						return
 					}
-					logActivity("REQUEST SENT - Status: [%d] | Alt Proto Payload URL: %s", status, targetURL)
+
+					logActivity("SENT", targetURL, status, "Protocol Bypass Vector")
 
 					if pkg.AltProtoRegex.MatchString(body) {
 						displayLine := fmt.Sprintf("%s [%s] [%s]",
@@ -49,7 +51,8 @@ func ExecuteProtocolPhase(
 
 						fmt.Println(displayLine)
 						pkg.AppendLine(*pkg.OutDir+"/findings.txt", logStorageLine)
-						logActivity("VULNERABILITY IDENTIFIED - %s", logStorageLine)
+
+						logActivity("SENT", targetURL, status, "VULNERABILITY IDENTIFIED: ALT-PROTO HIT Local Content Leak")
 					}
 				}
 			}(u)
