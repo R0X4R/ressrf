@@ -88,7 +88,7 @@ ressrf -h
 | **`-t`** | `--threads` | `20` | Active concurrent system processing worker threads. |
 | **`-r`** | `--rate` | `50` | Global maximum request rate constraint per second. |
 | **`-H`** | `--header` | `""` | Append persistent structural authorization tokens or custom headers. |
-| **`-o`** | `--outdir` | `vulns` | Output directory path for log captures and finding summaries. |
+| **`-o`** | `--outdir` | `output` | Output directory path for log captures and finding summaries. |
 | **`-s`** | `--silent` | `false` | Suppress text banners, informational stats, and milestone lines. |
 | **`-b`** | `--color-blind` | `false` | Strip ANSI terminal color sequences from stdout streams. |
 | **`-v`** | `--verbose` | `false` | Show livestream of active connection updates and status codes |
