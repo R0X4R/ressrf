@@ -1,3 +1,7 @@
+// Package lib implements the scanning phases for the ressrf SSRF fuzzer. Each phase
+// targets a different injection surface: HTTP headers, URL parameters, and protocol-bypass
+// payloads. All phases schedule work onto a shared job queue and report results through a
+// common activity-logging callback.
 package lib
 
 import (

@@ -1,0 +1,31 @@
+name: Release Assets
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  generate-sbom:
+    runs-on: ubuntu-latest
+    name: Generate and Upload SBOM
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Install cyclonedx-gomod
+        run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+
+      - name: Generate SBOM
+        run: cyclonedx-gomod mod -json -licenses -output ressrf.cdx.json
+
+      - name: Upload SBOM to release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ressrf.cdx.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

@@ -1,3 +1,15 @@
+// Command ressrf is an advanced in-band and out-of-band SSRF fuzzing scanner with dynamic request tracking.
+//
+// It reads target URLs from stdin or an input file, injects SSRF payloads into HTTP headers,
+// URL parameters, and query strings, and monitors for out-of-band interactions via an Interactsh
+// collaboration server. Results are written to an output directory as findings, activity logs,
+// and callback logs.
+//
+// # Usage
+//
+// Pipeline URLs:  cat urls.txt | ressrf
+// With input file: ressrf -l urls.txt
+// Custom collab:   ressrf -c oast.example.com
 package main
 
 import (
@@ -70,26 +82,16 @@ func hasStdinData() bool {
 	return (stat.Mode() & os.ModeCharDevice) == 0
 }
 
-// main is the program entry point that orchestrates configuration parsing, target collection,
-// collaboration session initialization, concurrent scanning phases, out-of-band callback polling,
-// and final result reporting.
+// run orchestrates configuration parsing, target collection, collaboration session
+// initialization, concurrent scanning phases, out-of-band callback polling, and final
+// result reporting. It returns an error if any fatal configuration or setup step fails.
 //
-// It parses CLI options and prepares the output directory, sources target URLs from stdin
-// when available or from the configured input file, and either starts an Interactsh client
-// or normalizes a provided collab server string. It launches worker goroutines, installs an
-// interrupt handler that cleans up and logs a termination event, and starts a poller to
-// process out-of-band interactions which are recorded to findings and activity logs.
-// The function executes header, parameter, and protocol scan phases, waits for completion,
-// keeps the session open for a short grace period to collect late callbacks, and then
-// prints and stores summarized OOB results.
-//
-// The function terminates the process on fatal configuration or runtime errors (printing
-// an error message before exiting).
-func main() {
+// Separating this logic from main makes the program testable and avoids exposing the
+// "exit status 1" message that go run appends when os.Exit is called directly.
+func run() error {
 	_, err := pkg.ParseOptions()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return err
 	}
 
 	if *pkg.ColorBlind {
@@ -110,19 +112,19 @@ func main() {
 		}
 
 		if err := scanner.Err(); err != nil {
-			fmt.Printf("[!] ERROR READING STANDARD INPUT STREAM: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("[ERROR] READING STANDARD INPUT STREAM: %w", err)
 		}
 
 	} else {
 		if *pkg.InputFile == "" {
-			fmt.Println("[!] ERROR: No targets provided. Pipeline urls via stdin or specify an input file using -l <file>")
-			os.Exit(1)
+			return fmt.Errorf("[ERROR] No targets provided. Pipeline urls via stdin or specify an input file using -l <file>")
 		}
 		urls, err = pkg.ReadLines(*pkg.InputFile)
-		if err != nil || len(urls) == 0 {
-			fmt.Printf("[!] ERROR: Cannot read input file or file is empty: %s\n", *pkg.InputFile)
-			os.Exit(1)
+		if err != nil {
+			return fmt.Errorf("[ERROR] Cannot read input file: %w", err)
+		}
+		if len(urls) == 0 {
+			return fmt.Errorf("[ERROR] Input file is empty: %s", *pkg.InputFile)
 		}
 	}
 
@@ -130,8 +132,7 @@ func main() {
 	if *pkg.CollabServer == "" {
 		collab, err = pkg.StartInteractsh()
 		if err != nil {
-			fmt.Printf("[!] ERROR: FAILED TO START INTERACTSH CLIENT: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("[ERROR] FAILED TO START INTERACTSH CLIENT: %w", err)
 		}
 		defer pkg.ClientInstance.Close()
 	} else {
@@ -165,7 +166,7 @@ func main() {
 	go func() {
 		<-sigChan
 		if !*pkg.Silent {
-			fmt.Println(color.RedString("\n[!] INTERRUPT SIGNAL RECEIVED! FLUSHING LOGS AND SHUTTING DOWN GRACEFULLY..."))
+			fmt.Println(color.RedString("\n[WRN] INTERRUPT SIGNAL RECEIVED! FLUSHING LOGS AND SHUTTING DOWN GRACEFULLY..."))
 		}
 		if pkg.ClientInstance != nil {
 			pkg.ClientInstance.Close()
@@ -217,7 +218,7 @@ func main() {
 			hitsMutex.Unlock()
 		})
 		if err != nil && !*pkg.Silent {
-			fmt.Printf("[!] FAILED TO LAUNCH LIVE TRANSACTION POLLER: %v\n", err)
+			fmt.Printf("[WRN] FAILED TO LAUNCH LIVE TRANSACTION POLLER: %v\n", err)
 		}
 	}
 
@@ -237,7 +238,7 @@ func main() {
 	close(jobs)
 
 	if !*pkg.Silent {
-		color.New(color.Bold, color.FgCyan).Print("\n[*] SCANNING COMPLETE. KEEPING SESSION OPEN 20s FOR REMAINING PAYLOADS TO LAND.\n")
+		color.New(color.Bold, color.FgCyan).Print("\n[INFO] SCANNING COMPLETE. KEEPING SESSION OPEN 20s FOR REMAINING PAYLOADS TO LAND.\n")
 	}
 	time.Sleep(20 * time.Second)
 
@@ -252,7 +253,7 @@ func main() {
 
 	hitsMutex.Lock()
 	if len(uniqueHits) == 0 {
-		fmt.Println("[-] NO OUT-OF-BOUND INTERACTIONS CAPTURED BY THE SERVER.")
+		fmt.Println("[INFO] NO OUT-OF-BOUND INTERACTIONS CAPTURED BY THE SERVER.")
 	} else {
 		for _, renderedLine := range uniqueHits {
 			fmt.Println(renderedLine)
@@ -267,4 +268,15 @@ func main() {
 		)
 	}
 	hitsMutex.Unlock()
+
+	return nil
+}
+
+// main calls run and prints any error to stderr before exiting with status 1.
+// This thin wrapper avoids calling os.Exit from the main logic, keeping it testable.
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }

@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version string for the build (e.g. v1.0.1-test)'
+        required: true
+        default: 'v1'
+      upload:
+        description: 'Upload artifacts to a release (only works on actual releases)'
+        required: true
+        default: false
+        type: boolean
+
+env:
+  GO_VERSION: '1.23'
+
+jobs:
+  build-and-upload:
+    name: Build and upload
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build: linux-amd64
+            os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - build: linux-arm64
+            os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+          - build: macos-amd64
+            os: macos-latest
+            goos: darwin
+            goarch: amd64
+          - build: macos-arm64
+            os: macos-latest
+            goos: darwin
+            goarch: arm64
+          - build: windows-amd64
+            os: windows-latest
+            goos: windows
+            goarch: amd64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Determine version
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            ver="${GITHUB_REF#refs/tags/}"
+          else
+            ver="${{ github.event.inputs.version }}"
+          fi
+          echo "VERSION=$ver" >> $GITHUB_ENV
+          echo "version=$ver" >> $GITHUB_OUTPUT
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build
+        shell: bash
+        run: |
+          go build -v -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+            -o "ressrf${{ matrix.goos == 'windows' && '.exe' || '' }}" .
+
+      - name: Build archive
+        id: archive
+        shell: bash
+        run: |
+          binary_name="ressrf"
+          ext="${{ matrix.goos == 'windows' && '.exe' || '' }}"
+          dirname="$binary_name-$VERSION-${{ matrix.build }}"
+          mkdir "$dirname"
+          cp "${binary_name}${ext}" "$dirname"
+
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            archive="$dirname.zip"
+            7z a "$archive" "$dirname"
+          else
+            archive="$dirname.tar.gz"
+            tar -czf "$archive" "$dirname"
+          fi
+
+          echo "ASSET=$archive" >> $GITHUB_ENV
+          echo "asset=$archive" >> $GITHUB_OUTPUT
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            certutil -hashfile "$ASSET" SHA256 > "$ASSET.sha256"
+          else
+            shasum -a 256 "$ASSET" > "$ASSET.sha256"
+          fi
+
+      - name: Upload release archive
+        if: github.event_name == 'release' || github.event.inputs.upload == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          files: |-
+            ${{ steps.archive.outputs.asset }}
+            ${{ steps.archive.outputs.asset }}.sha256
